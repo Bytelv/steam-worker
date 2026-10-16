@@ -1,0 +1,20 @@
+# Steam 游戏库 Worker（Cloudflare Workers）
+#
+# 部署（在 tools/steam-worker 目录下）：
+#   npx wrangler deploy
+#   npx wrangler secret put STEAM_API_KEY     # 粘贴 Steam Web API key
+#   npx wrangler secret put STEAM_ID          # steamID64（17 位）
+# 或者不用 wrangler，直接用 Cloudflare Dash → Workers → 创建 → 粘贴 worker.js。
+#
+# 部署后把地址填进 source/_data/steam.yml 的 api 字段（形如 https://steam-api.<子域>.workers.dev），
+# 页面就会在加载后拉一次实时数据。
+#
+# 只想让它服务自己的站点：把 ALLOW_ORIGIN 改成 https://blog.lvbyte.top
+
+name = "steam-api"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# 允许的来源；先保持 * 验证通了再收紧
+ALLOW_ORIGIN = "*"
