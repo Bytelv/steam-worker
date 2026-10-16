@@ -78,6 +78,41 @@ export default {
       }, 500, env);
     }
 
+    const url = new URL(request.url);
+
+    // GET /avatar：反代玩家头像。
+    // 头像在 avatars.steamstatic.com，游戏封面在 cdn.cloudflare.steamstatic.com，是两个域名；
+    // 后者国内一般还能通，前者经常连不上（页面就只剩个破图框）。由 Worker 取回来再吐给页面，
+    // 顺便缓存 1 小时——换头像不用等重建，也不用往仓库里塞图。
+    if (url.pathname === '/avatar') {
+      try {
+        const cache = caches.default;
+        const cacheKey = new Request('https://steam-cache.internal/avatar');
+        const hit = await cache.match(cacheKey);
+        if (hit) {
+          const cached = new Response(hit.body, hit);
+          cached.headers.set('Access-Control-Allow-Origin', env.ALLOW_ORIGIN || '*');
+          return cached;
+        }
+        const player = await cached('/ISteamUser/GetPlayerSummaries/v2/', { key, steamids: steamid }, TTL_RECENT, 'player');
+        const p = ((player.data.response && player.data.response.players) || [])[0] || {};
+        const avatarUrl = p.avatarfull || p.avatarmedium || '';
+        if (!avatarUrl) return json({ error: 'Steam 没返回头像地址（检查 STEAM_ID）' }, 502, env);
+        const img = await fetch(avatarUrl, { cf: { cacheTtl: 0 } });
+        if (!img.ok) return json({ error: '头像下载失败 HTTP ' + img.status }, 502, env);
+        const buf = await img.arrayBuffer();
+        const headers = Object.assign({
+          'Content-Type': img.headers.get('content-type') || 'image/jpeg',
+          'Cache-Control': 'public, max-age=3600'
+        }, cors(env));
+        const out = new Response(buf, { status: 200, headers: headers });
+        await cache.put(cacheKey, out.clone());
+        return out;
+      } catch (error) {
+        return json({ error: String(error.message || error) }, 502, env);
+      }
+    }
+
     try {
       const [player, recent, owned] = await Promise.all([
         cached('/ISteamUser/GetPlayerSummaries/v2/', { key, steamids: steamid }, TTL_RECENT, 'player'),
@@ -121,7 +156,7 @@ export default {
       };
 
       const extra = {};
-      if (new URL(request.url).searchParams.get('debug') === '1') {
+      if (url.searchParams.get('debug') === '1') {
         const hit = c => (c ? 'hit' : 'miss');
         extra['X-Steam-Cache'] = 'player=' + hit(player.cached) + ' recent=' + hit(recent.cached) + ' owned=' + hit(owned.cached);
       }

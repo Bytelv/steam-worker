@@ -8,6 +8,7 @@
 ```
 GET /            → { player, games, totalCount, totalPlaytimeMinutes, recentPlaytimeMinutes, fetchedAt }
 GET /?debug=1    → 同上，并带 X-Steam-Cache 响应头（player=hit recent=hit owned=miss）
+GET /avatar      → 反代玩家头像（Steam 头像在 avatars.steamstatic.com，国内常连不上；这里由 Worker 取回再吐给页面，缓存 1 小时）
 ```
 
 ```jsonc
